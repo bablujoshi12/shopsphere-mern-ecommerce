@@ -46,6 +46,8 @@ const emptyForm = {
   isActive: true,
 
   images: [],
+
+  specifications: [{ key: "", value: "" }],
 };
 
 function AdminProducts() {
@@ -325,6 +327,18 @@ function AdminProducts() {
       isActive: Boolean(product.isActive),
 
       images: [],
+
+      specifications: Object.entries(
+        product.specifications instanceof Map
+          ? Object.fromEntries(product.specifications)
+          : product.specifications || {},
+      ).map(([key, value]) => ({ key, value: String(value ?? "") })).length
+        ? Object.entries(
+            product.specifications instanceof Map
+              ? Object.fromEntries(product.specifications)
+              : product.specifications || {},
+          ).map(([key, value]) => ({ key, value: String(value ?? "") }))
+        : [{ key: "", value: "" }],
     });
 
     setImagePreviews(product.images || []);
@@ -378,6 +392,32 @@ function AdminProducts() {
 
       return updatedForm;
     });
+  };
+
+  // Dynamic product specifications (key-value pairs)
+  const handleSpecificationChange = (index, field, value) => {
+    setForm((previous) => ({
+      ...previous,
+      specifications: previous.specifications.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const addSpecification = () => {
+    setForm((previous) => ({
+      ...previous,
+      specifications: [...previous.specifications, { key: "", value: "" }],
+    }));
+  };
+
+  const removeSpecification = (index) => {
+    setForm((previous) => ({
+      ...previous,
+      specifications: previous.specifications.filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
   };
 
   // Handle image selection
@@ -492,6 +532,13 @@ function AdminProducts() {
     formData.append("sku", form.sku.trim());
 
     formData.append("isActive", String(form.isActive));
+
+    const specifications = Object.fromEntries(
+      form.specifications
+        .map(({ key, value }) => [key.trim(), value.trim()])
+        .filter(([key, value]) => key && value),
+    );
+    formData.append("specifications", JSON.stringify(specifications));
 
     if (form.discountPrice !== "") {
       formData.append("discountPrice", form.discountPrice);
@@ -1231,6 +1278,38 @@ function AdminProducts() {
                           </div>
                         ))}
                       </div>
+
+                      <div className="mt-4">
+                        <h6 className="fw-bold mb-3">Specifications</h6>
+                        {Object.entries(
+                          selectedProduct.specifications instanceof Map
+                            ? Object.fromEntries(selectedProduct.specifications)
+                            : selectedProduct.specifications || {},
+                        ).length > 0 ? (
+                          <div className="table-responsive">
+                            <table className="table table-sm table-bordered mb-0">
+                              <tbody>
+                                {Object.entries(
+                                  selectedProduct.specifications instanceof Map
+                                    ? Object.fromEntries(
+                                        selectedProduct.specifications,
+                                      )
+                                    : selectedProduct.specifications || {},
+                                ).map(([key, value]) => (
+                                  <tr key={key}>
+                                    <th className="w-50">{key}</th>
+                                    <td>{String(value)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-muted mb-0">
+                            No specifications added.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit}>
@@ -1401,6 +1480,85 @@ function AdminProducts() {
                             required
                             disabled={saving}
                           />
+                        </div>
+
+                        <div className="col-12">
+                          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <label className="form-label fw-semibold mb-0">
+                              Product Specifications
+                            </label>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={addSpecification}
+                              disabled={saving}
+                            >
+                              <FontAwesomeIcon icon={faPlus} className="me-1" />{" "}
+                              Add Specification
+                            </button>
+                          </div>
+                          <small className="text-muted d-block mb-3">
+                            Add details such as Color, Material, Size,
+                            Connectivity, or Warranty.
+                          </small>
+                          {form.specifications.map((specification, index) => (
+                            <div
+                              className="row g-2 align-items-end mb-2"
+                              key={`spec-${index}`}
+                            >
+                              <div className="col-5">
+                                <label className="form-label small">
+                                  Specification Name
+                                </label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={specification.key}
+                                  onChange={(e) =>
+                                    handleSpecificationChange(
+                                      index,
+                                      "key",
+                                      e.target.value,
+                                    )
+                                  }
+                                  disabled={saving}
+                                  placeholder="e.g. Color"
+                                />
+                              </div>
+                              <div className="col-5">
+                                <label className="form-label small">
+                                  Value
+                                </label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={specification.value}
+                                  onChange={(e) =>
+                                    handleSpecificationChange(
+                                      index,
+                                      "value",
+                                      e.target.value,
+                                    )
+                                  }
+                                  disabled={saving}
+                                  placeholder="e.g. Black"
+                                />
+                              </div>
+                              <div className="col-2 d-grid">
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-danger"
+                                  title="Remove specification"
+                                  onClick={() => removeSpecification(index)}
+                                  disabled={
+                                    saving || form.specifications.length === 1
+                                  }
+                                >
+                                  <FontAwesomeIcon icon={faTrash} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
 
                         <div className="col-12">

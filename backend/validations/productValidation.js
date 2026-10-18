@@ -1,6 +1,21 @@
 const Joi = require("joi");
 const ExpressError = require("../utils/ExpressError");
 
+// Parse multipart/form-data fields before Joi validation
+const parseSpecifications = (req, res, next) => {
+  if (typeof req.body.specifications === "string") {
+    try {
+      req.body.specifications = JSON.parse(req.body.specifications);
+    } catch (error) {
+      return next(
+        new ExpressError(400, "Specifications must contain valid JSON"),
+      );
+    }
+  }
+
+  next();
+};
+
 // Create Product Schema
 const productSchema = Joi.object({
   name: Joi.string().trim().required(),
@@ -9,7 +24,6 @@ const productSchema = Joi.object({
 
   price: Joi.number().min(0).required(),
 
-  // Cost Price
   costPrice: Joi.number().min(0).required(),
 
   discountPrice: Joi.number().min(0).max(Joi.ref("price")).optional(),
@@ -18,13 +32,15 @@ const productSchema = Joi.object({
 
   sku: Joi.string().trim().uppercase().required(),
 
-  category: Joi.string().required(),
+  category: Joi.string().hex().length(24).required(),
 
   images: Joi.array().items(Joi.string()).default([]),
 
   brand: Joi.string().trim().allow("").default(""),
 
-  specifications: Joi.object().default({}),
+  specifications: Joi.object()
+    .pattern(Joi.string().trim().min(1), Joi.string())
+    .default({}),
 
   isActive: Joi.boolean().default(true),
 });
@@ -37,7 +53,6 @@ const updateProductSchema = Joi.object({
 
   price: Joi.number().min(0),
 
-  // Cost Price
   costPrice: Joi.number().min(0),
 
   discountPrice: Joi.number().min(0).allow(null),
@@ -50,7 +65,10 @@ const updateProductSchema = Joi.object({
 
   sku: Joi.string().trim().uppercase(),
 
-  specifications: Joi.object(),
+  specifications: Joi.object().pattern(
+    Joi.string().trim().min(1),
+    Joi.string(),
+  ),
 
   isActive: Joi.boolean(),
 }).min(1);
@@ -59,6 +77,7 @@ const updateProductSchema = Joi.object({
 const productValidation = (req, res, next) => {
   const { error, value } = productSchema.validate(req.body, {
     abortEarly: false,
+    convert: true,
   });
 
   if (error) {
@@ -66,7 +85,6 @@ const productValidation = (req, res, next) => {
   }
 
   req.body = value;
-
   next();
 };
 
@@ -74,6 +92,7 @@ const productValidation = (req, res, next) => {
 const updateProductValidation = (req, res, next) => {
   const { error, value } = updateProductSchema.validate(req.body, {
     abortEarly: false,
+    convert: true,
   });
 
   if (error) {
@@ -81,11 +100,11 @@ const updateProductValidation = (req, res, next) => {
   }
 
   req.body = value;
-
   next();
 };
 
 module.exports = {
+  parseSpecifications,
   productValidation,
   updateProductValidation,
 };
