@@ -119,7 +119,10 @@ const getAllProducts = wrapAsync(async (req, res) => {
   // Category Filter
   if (category) {
     const categoryData = await Category.findOne({
-      name: { $regex: `^${category}$`, $options: "i" },
+      $or: [
+        { slug: category.toLowerCase() },
+        { name: { $regex: `^${category}$`, $options: "i" } },
+      ],
       isActive: true,
     });
 
