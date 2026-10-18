@@ -21,6 +21,7 @@ function ProductDetails() {
   const { id } = useParams();
 
   const [product, setProduct] = useState(null);
+  const [activeImage, setActiveImage] = useState(0);
   const [activeTab, setActiveTab] = useState("description");
   const [quantity, setQuantity] = useState(1);
   const [cartLoading, setCartLoading] = useState(false);
@@ -63,6 +64,7 @@ function ProductDetails() {
       }
 
       setProduct(result.product);
+      setActiveImage(0);
       setQuantity(1);
     } catch (error) {
       toast.error("Something went wrong while fetching product.");
@@ -474,7 +476,7 @@ function ProductDetails() {
             <div className="bg-light rounded-4 p-3 text-center">
               <img
                 src={
-                  product.images?.[0] ||
+                  product.images?.[activeImage] ||
                   "https://placehold.co/700x550/f8f9fa/0d6efd?text=Product+Image"
                 }
                 alt={product.name}
@@ -483,18 +485,22 @@ function ProductDetails() {
             </div>
 
             <div className="row g-3 mt-2">
-              {[1, 2, 3, 4].map((item) => (
-                <div className="col-3" key={item}>
-                  <div className="border rounded p-2 text-center">
+              {product.images?.map((image, index) => (
+                <div className="col-3" key={image + index}>
+                  <button
+                    type="button"
+                    className={`border rounded p-2 text-center bg-white w-100 h-100 ${
+                      activeImage === index ? "border-primary border-2" : ""
+                    }`}
+                    onClick={() => setActiveImage(index)}
+                    aria-label={`View product image ${index + 1}`}
+                  >
                     <img
-                      src={
-                        product.images?.[item - 1] ||
-                        "https://placehold.co/150x120/f8f9fa/0d6efd?text=Product"
-                      }
-                      alt="Product thumbnail"
+                      src={image}
+                      alt={`${product.name} ${index + 1}`}
                       className="img-fluid"
                     />
-                  </div>
+                  </button>
                 </div>
               ))}
             </div>
