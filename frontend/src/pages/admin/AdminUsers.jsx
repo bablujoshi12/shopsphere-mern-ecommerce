@@ -15,7 +15,7 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import AdminLayout from "../../components/admin/AdminLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+import BACKEND_URL from "../../config/api";
 
 function AdminUsers() {
   const navigate = useNavigate();
@@ -67,7 +67,7 @@ function AdminUsers() {
         limit: "10",
       });
 
-      const response = await fetch(`${API_URL}/api/users/admin/all?${params}`, {
+      const response = await fetch(`${BACKEND_URL}/users/admin/all?${params}`, {
         headers: getHeaders(),
       });
 
@@ -147,7 +147,7 @@ function AdminUsers() {
       // Role update only when changed
       if (userRole !== selectedUser.role) {
         const roleResponse = await fetch(
-          `${API_URL}/api/users/admin/${selectedUser._id}/role`,
+          `${BACKEND_URL}/users/admin/${selectedUser._id}/role`,
           {
             method: "PATCH",
             headers: getHeaders(),
