@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faStar,
-  faCartShopping,
-  faArrowRight,
-} from "@fortawesome/free-solid-svg-icons";
+import { faStar, faArrowRight } from "@fortawesome/free-solid-svg-icons";
 
 import BACKEND_URL from "../../config/api";
 
@@ -15,8 +11,6 @@ function FeaturedProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [addingProductId, setAddingProductId] = useState(null);
-  const [message, setMessage] = useState("");
 
   // Fetch products from backend
   useEffect(() => {
@@ -67,46 +61,7 @@ function FeaturedProducts() {
     return () => controller.abort();
   }, []);
 
-  // Add product to cart
-  const handleAddToCart = async (product) => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      setAddingProductId(product._id);
-      setMessage("");
-
-      const response = await fetch(`${BACKEND_URL}/cart`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token,
-        },
-        body: JSON.stringify({
-          productId: product._id,
-          quantity: 1,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Unable to add product to cart");
-      }
-
-      setMessage(`${product.name} added to cart successfully!`);
-    } catch (err) {
-      console.error("Add to cart error:", err);
-      setMessage(err.message || "Something went wrong. Please try again.");
-    } finally {
-      setAddingProductId(null);
-    }
-  };
-
+  // Get product image
   const getProductImage = (product) => {
     if (Array.isArray(product.images) && product.images.length > 0) {
       const firstImage = product.images[0];
@@ -131,14 +86,21 @@ function FeaturedProducts() {
     return "https://placehold.co/500x400/f8f9fa/0d6efd?text=Product";
   };
 
+  // Get final product price
   const getProductPrice = (product) => {
     return product.discountPrice > 0 && product.discountPrice < product.price
       ? product.discountPrice
       : product.price;
   };
 
+  // Get product rating
   const getProductRating = (product) => {
     return product.averageRating ?? product.rating ?? null;
+  };
+
+  // Navigate to product details
+  const handleProductClick = (productId) => {
+    navigate(`/products/${productId}`);
   };
 
   return (
@@ -160,22 +122,6 @@ function FeaturedProducts() {
             <FontAwesomeIcon icon={faArrowRight} className="ms-2" />
           </button>
         </div>
-
-        {/* Success / Error Message */}
-        {message && (
-          <div
-            className="alert alert-info alert-dismissible fade show"
-            role="alert"
-          >
-            {message}
-            <button
-              type="button"
-              className="btn-close"
-              aria-label="Close"
-              onClick={() => setMessage("")}
-            />
-          </div>
-        )}
 
         {/* Loading */}
         {loading && (
@@ -204,11 +150,12 @@ function FeaturedProducts() {
           </div>
         )}
 
-        {/* Products */}
+        {/* Featured Products */}
         {!loading && !error && products.length > 0 && (
           <div className="row g-4">
             {products.map((product) => {
               const price = getProductPrice(product);
+
               const hasDiscount =
                 product.discountPrice > 0 &&
                 product.discountPrice < product.price;
@@ -218,20 +165,33 @@ function FeaturedProducts() {
 
               return (
                 <div className="col-12 col-sm-6 col-lg-3" key={product._id}>
-                  <div className="card h-100 border-0 shadow-sm">
+                  <div
+                    className="card h-100 border-0 shadow-sm"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => handleProductClick(product._id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleProductClick(product._id);
+                      }
+                    }}
+                    style={{
+                      cursor: "pointer",
+                      transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                    }}
+                    onMouseEnter={(event) => {
+                      event.currentTarget.style.transform = "translateY(-4px)";
+                      event.currentTarget.classList.add("shadow");
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.style.transform = "translateY(0)";
+                      event.currentTarget.classList.remove("shadow");
+                    }}
+                    aria-label={`View ${product.name} details`}
+                  >
                     {/* Product Image */}
-                    <div
-                      className="bg-white p-3 overflow-hidden"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/products/${product._id}`)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          navigate(`/products/${product._id}`);
-                        }
-                      }}
-                      aria-label={`View ${product.name}`}
-                    >
+                    <div className="bg-white p-3 overflow-hidden">
                       <img
                         src={image}
                         alt={product.name}
@@ -250,7 +210,7 @@ function FeaturedProducts() {
                     </div>
 
                     {/* Product Details */}
-                    <div className="card-body d-flex flex-column">
+                    <div className="card-body">
                       <h5 className="fw-semibold mb-2">{product.name}</h5>
 
                       {rating !== null && rating !== undefined && (
@@ -262,7 +222,7 @@ function FeaturedProducts() {
                         </div>
                       )}
 
-                      <div className="mb-3">
+                      <div>
                         <span className="fw-bold fs-5">
                           ₹{Number(price || 0).toLocaleString("en-IN")}
                         </span>
@@ -273,35 +233,6 @@ function FeaturedProducts() {
                           </span>
                         )}
                       </div>
-
-                      <button
-                        type="button"
-                        className="btn btn-primary w-100 mt-auto"
-                        disabled={
-                          addingProductId === product._id || product.stock === 0
-                        }
-                        onClick={() => handleAddToCart(product)}
-                      >
-                        {addingProductId === product._id ? (
-                          <>
-                            <span
-                              className="spinner-border spinner-border-sm me-2"
-                              role="status"
-                            />
-                            Adding...
-                          </>
-                        ) : product.stock === 0 ? (
-                          "Out of Stock"
-                        ) : (
-                          <>
-                            <FontAwesomeIcon
-                              icon={faCartShopping}
-                              className="me-2"
-                            />
-                            Add to Cart
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 </div>

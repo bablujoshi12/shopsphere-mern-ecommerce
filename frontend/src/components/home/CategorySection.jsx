@@ -83,7 +83,7 @@ function CategorySection() {
             No categories available right now.
           </p>
         ) : (
-          <div className="row g-4">
+          <div className="row g-3 g-md-4">
             {categories.map((category) => {
               const icon =
                 categoryIcons[category.name.toLowerCase()] || faLayerGroup;
@@ -92,8 +92,16 @@ function CategorySection() {
                 <div className="col-6 col-md-4 col-lg" key={category._id}>
                   <button
                     type="button"
-                    className="card border-0 shadow-sm h-100 text-center p-4 w-100"
+                    className="card border-0 shadow-sm h-100 text-center p-3 p-md-4 w-100 rounded-4 bg-white"
                     onClick={() => handleCategoryClick(category.name)}
+                    onMouseEnter={(event) => {
+                      event.currentTarget.classList.add("shadow");
+                      event.currentTarget.style.transform = "translateY(-5px)";
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.classList.remove("shadow");
+                      event.currentTarget.style.transform = "translateY(0)";
+                    }}
                     style={{
                       cursor: "pointer",
                       transition: "transform 0.2s ease, box-shadow 0.2s ease",
@@ -104,7 +112,7 @@ function CategorySection() {
                       <img
                         src={category.image}
                         alt={category.name}
-                        className="img-fluid rounded mb-3 mx-auto"
+                        className="rounded-4 mb-3 mx-auto"
                         style={{
                           width: "80px",
                           height: "80px",
@@ -112,12 +120,20 @@ function CategorySection() {
                         }}
                       />
                     ) : (
-                      <div className="text-primary fs-1 mb-3">
-                        <FontAwesomeIcon icon={icon} />
+                      <div
+                        className="d-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded-4 mx-auto mb-3"
+                        style={{
+                          width: "80px",
+                          height: "80px",
+                        }}
+                      >
+                        <FontAwesomeIcon icon={icon} className="fs-2" />
                       </div>
                     )}
 
-                    <h6 className="fw-semibold mb-0">{category.name}</h6>
+                    <h6 className="fw-semibold text-dark mb-0">
+                      {category.name}
+                    </h6>
                   </button>
                 </div>
               );

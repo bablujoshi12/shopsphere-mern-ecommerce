@@ -92,9 +92,9 @@ function Footer() {
           <div className="col-lg-3">
             <h6 className="fw-bold mb-3">Contact Us</h6>
 
-            <p className="text-secondary mb-2">support@shopsphere.com</p>
+            <p className="text-secondary mb-2">bjbablujoshi@gmail.com</p>
 
-            <p className="text-secondary mb-0">+91 98765 43210</p>
+            <p className="text-secondary mb-0">+91 8630444725</p>
           </div>
         </div>
 
