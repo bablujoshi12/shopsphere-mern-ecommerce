@@ -5,10 +5,9 @@ const Cart = require("../model/Cart");
 const Order = require("../model/Order");
 const Product = require("../model/Product");
 const Coupon = require("../model/Coupon");
-
 const ExpressError = require("../utils/ExpressError");
 
-// Calculate cart prices and validate products
+// Calculate cart and capture prices at checkout.
 const calculateCart = async (cart) => {
   let subtotal = 0;
   let discount = 0;
@@ -34,10 +33,21 @@ const calculateCart = async (cart) => {
       );
     }
 
+    if (
+      typeof product.costPrice !== "number" ||
+      !Number.isFinite(product.costPrice) ||
+      product.costPrice < 0
+    ) {
+      throw new ExpressError(
+        400,
+        `Purchase cost is missing for ${product.name}`,
+      );
+    }
+
     const originalPrice = product.price;
 
     const finalPrice =
-      product.discountPrice && product.discountPrice < product.price
+      product.discountPrice != null && product.discountPrice < product.price
         ? product.discountPrice
         : product.price;
 
@@ -50,19 +60,15 @@ const calculateCart = async (cart) => {
       name: product.name,
       image: product.images?.[0] || "",
       price: finalPrice,
+      costPriceSnapshot: product.costPrice,
       quantity: item.quantity,
     });
   }
 
-  return {
-    subtotal,
-    discount,
-    eligibleAmount,
-    orderItems,
-  };
+  return { subtotal, discount, eligibleAmount, orderItems };
 };
 
-// Validate and calculate coupon discount
+// Validate coupon and calculate discount.
 const calculateCouponDiscount = async (code, eligibleAmount) => {
   if (!code) {
     return {
@@ -77,10 +83,7 @@ const calculateCouponDiscount = async (code, eligibleAmount) => {
   }
 
   const couponCode = code.trim().toUpperCase();
-
-  const coupon = await Coupon.findOne({
-    code: couponCode,
-  });
+  const coupon = await Coupon.findOne({ code: couponCode });
 
   if (!coupon) {
     throw new ExpressError(400, "Invalid coupon code");
@@ -105,12 +108,12 @@ const calculateCouponDiscount = async (code, eligibleAmount) => {
     );
   }
 
-  let couponDiscount = 0;
+  let couponDiscount;
 
   if (coupon.discountType === "percentage") {
     couponDiscount = (eligibleAmount * coupon.discountValue) / 100;
 
-    if (coupon.maxDiscount !== null && coupon.maxDiscount !== undefined) {
+    if (coupon.maxDiscount != null) {
       couponDiscount = Math.min(couponDiscount, coupon.maxDiscount);
     }
   } else {
@@ -127,7 +130,7 @@ const calculateCouponDiscount = async (code, eligibleAmount) => {
   };
 };
 
-// Create Razorpay Order
+// Create Razorpay checkout order.
 const createRazorpayOrder = async (req, res) => {
   try {
     const { couponCode = "" } = req.body;
@@ -145,11 +148,8 @@ const createRazorpayOrder = async (req, res) => {
 
     const { eligibleAmount } = await calculateCart(cart);
 
-    const {
-      coupon,
-      couponCode: normalizedCouponCode,
-      couponDiscount,
-    } = await calculateCouponDiscount(couponCode, eligibleAmount);
+    const { couponCode: normalizedCouponCode, couponDiscount } =
+      await calculateCouponDiscount(couponCode, eligibleAmount);
 
     const shippingCharge = 0;
 
@@ -198,8 +198,12 @@ const createRazorpayOrder = async (req, res) => {
   }
 };
 
-// Verify Payment and Create ShopSphere Order
+// Verify payment and create the ShopSphere order.
 const verifyRazorpayPayment = async (req, res) => {
+  let reservedItems = [];
+  let claimedCouponId = null;
+  let orderCreated = false;
+
   try {
     const {
       razorpay_order_id,
@@ -220,9 +224,15 @@ const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // Verify Razorpay signature
+    // Verify Razorpay signature.
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!secret) {
+      throw new ExpressError(500, "Razorpay secret is not configured");
+    }
+
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", secret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
@@ -239,7 +249,30 @@ const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // Fetch Razorpay order and confirm its owner
+    // Check whether this payment already has an order.
+    const existingOrder = await Order.findOne({
+      razorpayPaymentId: razorpay_payment_id,
+    });
+
+    if (existingOrder) {
+      if (
+        String(existingOrder.user) !== String(req.user._id) ||
+        existingOrder.razorpayOrderId !== razorpay_order_id
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "This payment is already linked to another order",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Payment was already verified",
+        order: existingOrder,
+      });
+    }
+
+    // Verify Razorpay order ownership.
     const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
 
     if (razorpayOrder.notes?.userId !== String(req.user._id)) {
@@ -249,31 +282,19 @@ const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // Confirm payment status and amount with Razorpay
+    // Confirm payment directly with Razorpay.
     const payment = await razorpay.payments.fetch(razorpay_payment_id);
 
     if (
       payment.order_id !== razorpay_order_id ||
       payment.status !== "captured" ||
       payment.currency !== "INR" ||
-      payment.amount !== razorpayOrder.amount
+      payment.amount !== razorpayOrder.amount ||
+      razorpayOrder.currency !== "INR"
     ) {
       return res.status(400).json({
         success: false,
         message: "Payment has not been confirmed",
-      });
-    }
-
-    // Prevent creating a duplicate order for the same payment
-    const existingOrder = await Order.findOne({
-      razorpayPaymentId: razorpay_payment_id,
-    });
-
-    if (existingOrder) {
-      return res.status(200).json({
-        success: true,
-        message: "Payment was already verified",
-        order: existingOrder,
       });
     }
 
@@ -282,17 +303,17 @@ const verifyRazorpayPayment = async (req, res) => {
     }).populate("items.product");
 
     if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: "Your cart is empty",
+        message:
+          "Payment is captured but your cart is empty. Contact support for order assistance.",
       });
     }
 
     const { subtotal, discount, eligibleAmount, orderItems } =
       await calculateCart(cart);
 
-    // Use the coupon saved in Razorpay order notes, not a new
-    // coupon code supplied during payment verification.
+    // Use the coupon saved when the Razorpay order was created.
     const couponCode = razorpayOrder.notes?.couponCode || "";
 
     const {
@@ -319,7 +340,7 @@ const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // Claim coupon usage atomically before creating the order.
+    // Claim coupon usage atomically.
     if (coupon) {
       const claimedCoupon = await Coupon.findOneAndUpdate(
         {
@@ -331,9 +352,7 @@ const verifyRazorpayPayment = async (req, res) => {
           },
         },
         {
-          $inc: {
-            usedCount: 1,
-          },
+          $inc: { usedCount: 1 },
         },
         { new: true },
       );
@@ -342,14 +361,14 @@ const verifyRazorpayPayment = async (req, res) => {
         return res.status(409).json({
           success: false,
           message:
-            "This coupon is no longer available. Please contact support for payment assistance.",
+            "Payment was captured, but the coupon is no longer available. Contact support.",
         });
       }
+
+      claimedCouponId = coupon._id;
     }
 
-    // Reserve stock safely before saving the order.
-    const reservedItems = [];
-
+    // Reserve stock with conditional updates.
     for (const item of cart.items) {
       const updatedProduct = await Product.findOneAndUpdate(
         {
@@ -358,41 +377,16 @@ const verifyRazorpayPayment = async (req, res) => {
           isActive: true,
         },
         {
-          $inc: {
-            stock: -item.quantity,
-          },
+          $inc: { stock: -item.quantity },
         },
         { new: true },
       );
 
       if (!updatedProduct) {
-        for (const reservedItem of reservedItems) {
-          await Product.findByIdAndUpdate(reservedItem.product, {
-            $inc: {
-              stock: reservedItem.quantity,
-            },
-          });
-        }
-
-        if (coupon) {
-          await Coupon.findOneAndUpdate(
-            {
-              _id: coupon._id,
-              usedCount: { $gt: 0 },
-            },
-            {
-              $inc: {
-                usedCount: -1,
-              },
-            },
-          );
-        }
-
-        return res.status(409).json({
-          success: false,
-          message:
-            "Product stock changed during payment. Please contact support if your payment was deducted.",
-        });
+        throw new ExpressError(
+          409,
+          "Payment was captured, but product stock changed. Contact support for order assistance.",
+        );
       }
 
       reservedItems.push({
@@ -401,54 +395,33 @@ const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    let order;
+    // Create the order. Unique index prevents duplicate payment IDs.
+    const order = await Order.create({
+      user: req.user._id,
+      items: orderItems,
+      shippingAddress,
+      paymentMethod: "Razorpay",
+      paymentStatus: "paid",
+      orderStatus: "confirmed",
+      subtotal,
+      discount,
+      couponCode: normalizedCouponCode,
+      couponDiscount,
+      shippingCharge,
+      totalAmount,
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+    });
 
+    orderCreated = true;
+
+    // Clearing the cart is a separate operation. Do not undo a paid
+    // order if cart clearing fails.
     try {
-      order = await Order.create({
-        user: req.user._id,
-        items: orderItems,
-        shippingAddress,
-        paymentMethod: "Razorpay",
-        paymentStatus: "paid",
-        orderStatus: "confirmed",
-        subtotal,
-        discount,
-        couponCode: normalizedCouponCode,
-        couponDiscount,
-        shippingCharge,
-        totalAmount,
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
-      });
-
-      // Clear cart after successful order creation.
       cart.items = [];
       await cart.save();
-    } catch (error) {
-      // Compensate stock and coupon usage if saving the order fails.
-      for (const reservedItem of reservedItems) {
-        await Product.findByIdAndUpdate(reservedItem.product, {
-          $inc: {
-            stock: reservedItem.quantity,
-          },
-        });
-      }
-
-      if (coupon) {
-        await Coupon.findOneAndUpdate(
-          {
-            _id: coupon._id,
-            usedCount: { $gt: 0 },
-          },
-          {
-            $inc: {
-              usedCount: -1,
-            },
-          },
-        );
-      }
-
-      throw error;
+    } catch (cartError) {
+      console.error("Order created but cart clearing failed:", cartError);
     }
 
     return res.status(201).json({
@@ -458,6 +431,60 @@ const verifyRazorpayPayment = async (req, res) => {
     });
   } catch (err) {
     console.error("Payment verification error:", err);
+
+    // If the order was saved, do not reverse stock or coupon usage.
+    if (!orderCreated) {
+      // Restore stock reserved by this request.
+      for (const item of reservedItems) {
+        try {
+          await Product.findByIdAndUpdate(item.product, {
+            $inc: { stock: item.quantity },
+          });
+        } catch (restoreError) {
+          console.error("Stock restoration failed:", restoreError);
+        }
+      }
+
+      // Release coupon usage claimed by this request.
+      if (claimedCouponId) {
+        try {
+          await Coupon.findOneAndUpdate(
+            {
+              _id: claimedCouponId,
+              usedCount: { $gt: 0 },
+            },
+            {
+              $inc: { usedCount: -1 },
+            },
+          );
+        } catch (couponError) {
+          console.error("Coupon restoration failed:", couponError);
+        }
+      }
+    }
+
+    // Handle a concurrent request that saved the same payment first.
+    if (err.code === 11000) {
+      try {
+        const existingOrder = await Order.findOne({
+          razorpayPaymentId: req.body?.razorpay_payment_id,
+        });
+
+        if (
+          existingOrder &&
+          String(existingOrder.user) === String(req.user._id) &&
+          existingOrder.razorpayOrderId === req.body?.razorpay_order_id
+        ) {
+          return res.status(200).json({
+            success: true,
+            message: "Payment was already verified",
+            order: existingOrder,
+          });
+        }
+      } catch (lookupError) {
+        console.error("Duplicate payment lookup failed:", lookupError);
+      }
+    }
 
     return res.status(err.statusCode || 500).json({
       success: false,

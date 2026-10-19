@@ -7,31 +7,24 @@ const orderItemSchema = new mongoose.Schema(
       ref: "Product",
       required: true,
     },
-
     name: {
       type: String,
       required: true,
     },
-
     image: {
       type: String,
       default: "",
     },
-
-    // Selling price at checkout
     price: {
       type: Number,
       required: true,
       min: 0,
     },
-
-    // Purchase cost captured at checkout
     costPriceSnapshot: {
       type: Number,
       required: true,
       min: 0,
     },
-
     quantity: {
       type: Number,
       required: true,
@@ -71,9 +64,7 @@ const orderSchema = new mongoose.Schema(
       type: [orderItemSchema],
       required: true,
       validate: {
-        validator: function (items) {
-          return items.length > 0;
-        },
+        validator: (items) => items.length > 0,
         message: "Order must contain at least one product",
       },
     },
@@ -112,20 +103,9 @@ const orderSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    subtotal: { type: Number, required: true, min: 0 },
+    discount: { type: Number, default: 0, min: 0 },
 
-    // Product discount
-    discount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    // Coupon code applied to the order
     couponCode: {
       type: String,
       default: "",
@@ -133,81 +113,45 @@ const orderSchema = new mongoose.Schema(
       uppercase: true,
     },
 
-    // Discount received from coupon
-    couponDiscount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    couponDiscount: { type: Number, default: 0, min: 0 },
 
-    // Razorpay payment references
     razorpayOrderId: {
       type: String,
-      default: "",
+      default: undefined,
     },
 
+    // Empty or missing payment IDs are not stored as unique values.
     razorpayPaymentId: {
       type: String,
-      default: "",
-      unique: true,
-      sparse: true,
-    },
-
-    shippingCharge: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    totalAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    deliveredAt: {
-      type: Date,
-      default: null,
-    },
-
-    cancelledAt: {
-      type: Date,
-      default: null,
-    },
-
-    returnReason: {
-      type: String,
-      default: "",
+      default: undefined,
       trim: true,
     },
 
-    returnRejectionReason: {
-      type: String,
-      default: "",
-      trim: true,
-    },
+    shippingCharge: { type: Number, default: 0, min: 0 },
+    totalAmount: { type: Number, required: true, min: 0 },
 
-    returnRequestedAt: {
-      type: Date,
-      default: null,
-    },
+    deliveredAt: { type: Date, default: null },
+    cancelledAt: { type: Date, default: null },
 
-    returnReviewedAt: {
-      type: Date,
-      default: null,
-    },
-
-    returnReceivedAt: {
-      type: Date,
-      default: null,
-    },
-
-    returnStockRestored: {
-      type: Boolean,
-      default: false,
-    },
+    returnReason: { type: String, default: "", trim: true },
+    returnRejectionReason: { type: String, default: "", trim: true },
+    returnRequestedAt: { type: Date, default: null },
+    returnReviewedAt: { type: Date, default: null },
+    returnReceivedAt: { type: Date, default: null },
+    returnStockRestored: { type: Boolean, default: false },
   },
   { timestamps: true },
+);
+
+// Only non-empty Razorpay payment IDs must be unique.
+orderSchema.index(
+  { razorpayPaymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      razorpayPaymentId: { $gt: "" },
+    },
+  },
 );
 
 module.exports = mongoose.model("Order", orderSchema);
