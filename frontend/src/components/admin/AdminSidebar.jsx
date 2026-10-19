@@ -11,6 +11,7 @@ import {
   faStar,
   faImages,
   faXmark,
+  faRightFromBracket,
 } from "@fortawesome/free-solid-svg-icons";
 
 const navItems = [
@@ -26,6 +27,14 @@ const navItems = [
 
 function AdminSidebar({ mobileMenuOpen, setMobileMenuOpen, navigate }) {
   const location = useLocation();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("loggedInUser");
+
+    setMobileMenuOpen(false);
+    navigate("/login", { replace: true });
+  };
 
   return (
     <>
@@ -84,6 +93,18 @@ function AdminSidebar({ mobileMenuOpen, setMobileMenuOpen, navigate }) {
               </button>
             );
           })}
+
+          {/* Logout Button */}
+          <hr className="my-2" />
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="btn btn-outline-danger text-start d-inline-flex align-items-center gap-2 gap-lg-3 text-nowrap"
+          >
+            <FontAwesomeIcon icon={faRightFromBracket} />
+            <span>Logout</span>
+          </button>
         </nav>
       </aside>
     </>

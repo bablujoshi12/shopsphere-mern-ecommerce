@@ -22,6 +22,10 @@ function OrderDetails() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Cancel Order Modal States
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
   // Return Modal States
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnReason, setReturnReason] = useState("");
@@ -53,15 +57,16 @@ function OrderDetails() {
     }
   };
 
-  // Cancel Order
-  const handleCancelOrder = async () => {
-    const confirmCancel = window.confirm(
-      "Are you sure you want to cancel this order?",
-    );
+  // Open Cancel Order Modal
+  const handleCancelOrder = () => {
+    setShowCancelModal(true);
+  };
 
-    if (!confirmCancel) return;
-
+  // Confirm Cancel Order
+  const handleConfirmCancelOrder = async () => {
     try {
+      setCancelLoading(true);
+
       const url = `${BACKEND_URL}/orders/${id}/cancel`;
 
       const response = await fetch(url, {
@@ -80,8 +85,11 @@ function OrderDetails() {
 
       toast.success(result.message);
       setOrder(result.order);
+      setShowCancelModal(false);
     } catch (err) {
       toast.error("Something went wrong");
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -551,6 +559,93 @@ function OrderDetails() {
           </div>
         </div>
       </div>
+
+      {/* Cancel Order Bootstrap Modal */}
+      {showCancelModal && (
+        <>
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancelModalTitle"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !cancelLoading) {
+                setShowCancelModal(false);
+              }
+            }}
+          >
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow">
+                <div className="modal-header">
+                  <h5 className="modal-title fw-bold" id="cancelModalTitle">
+                    <FontAwesomeIcon
+                      icon={faBan}
+                      className="text-danger me-2"
+                    />
+                    Cancel Order
+                  </h5>
+
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Close"
+                    disabled={cancelLoading}
+                    onClick={() => setShowCancelModal(false)}
+                  ></button>
+                </div>
+
+                <div className="modal-body">
+                  Are you sure you want to cancel this order? This action cannot
+                  be undone.
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-light border"
+                    disabled={cancelLoading}
+                    onClick={() => setShowCancelModal(false)}
+                  >
+                    Keep Order
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={cancelLoading}
+                    onClick={handleConfirmCancelOrder}
+                  >
+                    {cancelLoading ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          aria-hidden="true"
+                        ></span>
+                        Cancelling...
+                      </>
+                    ) : (
+                      <>
+                        <FontAwesomeIcon icon={faBan} className="me-2" />
+                        Yes, Cancel Order
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="modal-backdrop fade show"
+            onClick={() => {
+              if (!cancelLoading) {
+                setShowCancelModal(false);
+              }
+            }}
+          ></div>
+        </>
+      )}
 
       {/* Return Order Bootstrap Modal */}
       {showReturnModal && (
